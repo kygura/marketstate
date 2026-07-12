@@ -5,46 +5,46 @@ plus `<i>(last close, {date})</i>` appended if markets are closed. Full
 layout/worked example: DESIGN.md §2, Message 3. Ticker universe (SPEC.md): SPY,
 QQQ, DIA, IWM + VIX.
 
-## Tool sequence
+## Capability sequence
 
-1. `mcp__claude_ai_Alpha_Vantage_MCP_Server__MARKET_STATUS` — call **first**.
-   Determines whether the rest of this section is real-time or last-close
-   framing (per SPEC.md failure handling: market closed → last-close, explicitly
-   labeled, never presented as real-time).
-2. `mcp__claude_ai_Alpha_Vantage_MCP_Server__REALTIME_BULK_QUOTES` (preferred,
-   one call for the whole basket) or, if unavailable,
-   `mcp__claude_ai_Alpha_Vantage_MCP_Server__GLOBAL_QUOTE` per symbol — SPY, QQQ,
-   DIA, IWM, and VIX. Levels + signed % change for each.
-3. `mcp__claude_ai_Alpha_Vantage_MCP_Server__REALTIME_PUT_CALL_RATIO` — market-
-   wide or SPY-proxy reading, feeds the regime line alongside VIX.
-4. `mcp__claude_ai_Alpha_Vantage_MCP_Server__TOP_GAINERS_LOSERS` — extract the
-   sector tilt (which sectors dominate gainers vs. losers), not the raw list.
-5. `mcp__claude_ai_Alpha_Vantage_MCP_Server__NEWS_SENTIMENT` — general market /
-   `financial_markets` topic, for the sentiment read.
-6. `mcp__claude_ai_Alpha_Vantage_MCP_Server__EARNINGS_CALENDAR` — next 1-2 weeks,
-   flag notable names on deck.
-7. `mcp__claude_ai_Alpha_Vantage_MCP_Server__INDEX_DATA` /
-   `mcp__claude_ai_Alpha_Vantage_MCP_Server__INDEX_CATALOG` — optional, only if
-   a broader index cross-check adds signal beyond the four ETFs; skip if
-   redundant (keep the message under budget).
+Gather in this order, using whatever armed tool provides each capability
+(bound in Stage 1) or `WebSearch` if none does:
+
+1. **Market status** — open/closed, gather **first**. Determines whether the
+   rest of this section is real-time or last-close framing (per SPEC.md failure
+   handling: market closed → last-close, explicitly labeled, never presented as
+   real-time).
+2. **Index quotes** — SPY, QQQ, DIA, IWM, and VIX. Levels + signed % change for
+   each; one batched call/search if the tool supports it.
+3. **Put/call ratio** — market-wide or SPY-proxy reading, feeds the regime line
+   alongside VIX. Commonly no armed tool carries this — see fallback below.
+4. **Breadth / top movers** — extract the sector tilt (which sectors dominate
+   gainers vs. losers), not a raw list.
+5. **Market news + sentiment** — general market topic, for the sentiment read.
+6. **Earnings calendar** — next 1-2 weeks, flag notable names on deck.
 
 ## Extraction
 
 - Market open/closed state (and last-close date if closed).
 - SPY, QQQ, DIA, IWM: level + signed % change, arrow.
 - VIX: level + signed change, arrow; note "ticking up/down" qualitatively.
+  `data/summary.json` carries `VIXCLS` (FRED, **prior close** — never present it
+  as real-time) with delta/z vs. baseline: use it as the vol anchor for regime
+  framing ("VIX vs. its 30-snapshot mean"), while the live level still comes
+  from the quote tools above. Footer-credit as `FRED(vix_close)` when used.
 - Put/call ratio if available; if not, VIX-only regime read (note this in
   Message 1's `Notes:` line per DESIGN.md's worked example).
 - Sector tilt from gainers/losers (which sectors green vs. red — 2-3 words each).
 - Sentiment tone (neutral/cautious/constructive) and any earnings on deck.
 
-## Fallback if a tool fails or is missing
+## Fallback if a capability has no tool or a tool fails
 
-- `ToolSearch` first for any not-yet-loaded Alpha Vantage tool.
+- `ToolSearch` the live inventory first (deferred tools don't appear until
+  requested).
 - Still failing after one retry: degrade to `WebSearch` (e.g.
   `"S&P 500 Nasdaq Dow Russell 2000 close today"`, `"VIX level today"`) and mark
   `TOOL✗→WebSearch` in the footer.
-- `REALTIME_PUT_CALL_RATIO` unavailable is common (data licensing) — this is not
+- No put/call source is common (data licensing) — this is not
   an error to chase hard; drop to a VIX-only regime read and note the
   degradation, as shown in DESIGN.md's Message 1 worked example.
 

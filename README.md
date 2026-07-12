@@ -1,6 +1,6 @@
 # marketstate
 
-A Claude Code routine that scans markets (equities, macro, crypto, tech) and geopolitics, analyzes current pricing and catalysts, and delivers an 8-message Telegram briefing. Each run is grounded by a local bun + TypeScript fetcher hitting direct APIs (FRED for macro/liquidity, Hyperliquid for perp open interest and funding), persisting JSON snapshots under `data/` and building a rolling baseline — so every report frames current values against baseline, not raw numbers alone. Alpha Vantage MCP + WebSearch enrich the picture at run time; Composio delivers to Telegram.
+A Claude Code routine that scans markets (equities, macro, crypto, tech) and geopolitics, analyzes current pricing and catalysts, and delivers an 8-message Telegram briefing. Each run is grounded by a local bun + TypeScript fetcher hitting direct APIs (FRED for macro/liquidity, Hyperliquid for perp open interest and funding, plus keyless crypto-context sources), persisting JSON snapshots under `data/` and building a rolling baseline — so every report frames current values against baseline, not raw numbers alone. Whatever data tools the session is armed with (typically Exa search/research) plus live web search enrich the picture at run time; Composio delivers to Telegram.
 
 **Not financial advice.** This is market intelligence only — a reasoned read of public data, not a recommendation to buy or sell anything.
 
@@ -11,16 +11,16 @@ A Claude Code routine that scans markets (equities, macro, crypto, tech) and geo
 - `DESIGN.md` — Telegram message design (layout, formatting, per-message examples, length budgets)
 - `domains/*.md` — per-domain data playbooks (macro, equities, crypto, tech, geopolitics)
 - `src/` — the fetcher (FRED, Hyperliquid modules, persistence/baseline logic)
-- `data/` — timestamped snapshots + `summary.json` (gitignored, machine-local)
+- `data/` — timestamped snapshots + `summary.json` + `catalysts.json` (committed — the daily routine persists each run's snapshot to the repo)
 - `package.json`, `.env.example` — fetcher dependencies and env template
 
 ## Prerequisites
 
 - [bun](https://bun.sh) installed; run `bun install` once in this directory.
-- Claude Code session open in this directory, with these MCP connectors active:
-  - **Alpha Vantage MCP** (claude.ai connector)
+- Claude Code session open in this directory, with:
   - **Composio MCP** with Telegram connection (first run will surface auth link if not connected)
   - **WebSearch** enabled
+  - Optionally, any data connectors (e.g. **Exa**) — the runbook discovers and binds whatever is armed at run time; anything missing degrades to web search
 - No credentials stored in this repo — connector auth lives in the connectors, the FRED key in `.env` (gitignored).
 
 ## Setup

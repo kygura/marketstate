@@ -94,7 +94,8 @@ tool calls as debug" requirements. Terse. Informs, does not pollute.
 - Line: Telegram delivery status (this message arriving is itself proof; state the
   connector/tool used).
 - Line: local fetch status — per-source result from `data/summary.json`
-  (FRED, Hyperliquid), including skipped/failed states.
+  (FRED, Hyperliquid, crypto context, catalysts), including skipped/failed
+  states.
 - Line: data connectors detected, grouped and counted, not enumerated one-per-line.
 - Line: market status (open/closed) so the reader frames everything that follows.
 - Optional line: any degradation flagged up front (e.g. a connector missing, will
@@ -106,15 +107,15 @@ tool calls as debug" requirements. Terse. Informs, does not pollute.
 🛠️ <b>marketstate run</b> — 2026-07-12 13:40 UTC
 
 <b>Delivery:</b> Telegram via Composio ✅
-<b>Fetch:</b> FRED ✅ · Hyperliquid ✅ (baseline n=32)
-<b>Data tools:</b> Alpha Vantage MCP (128 actions) ✅ · WebSearch ✅ · WebFetch ✅
+<b>Fetch:</b> FRED ✅ · Hyperliquid ✅ · CryptoCtx ✅ · Catalysts ✅ (baseline n=32)
+<b>Data tools:</b> Exa (6 tools) ✅ · Composio (Telegram) ✅ · WebSearch ✅ · WebFetch ✅
 <b>Market status:</b> US equities CLOSED (weekend) — equities section uses last close
-<b>Notes:</b> REALTIME_PUT_CALL_RATIO unavailable this run → VIX-only regime read
+<b>Notes:</b> no put/call feed armed this run → VIX-only regime read
 
 <i>Domains to follow: Macro • Equities • Crypto • Tech • Geopolitics • Thesis • TLDR</i>
 ```
 
-Degraded fetch examples for the Fetch line: `FRED skipped (no key) · Hyperliquid ✅`
+Degraded fetch examples for the Fetch line: `FRED skipped (no key) · Hyperliquid ✅ · CryptoCtx ✅ · Catalysts skipped (no key)`
 or `Fetch: FAILED (network) — MCP/WebSearch only, no baseline framing this run`.
 
 If Telegram is NOT connected, this message is never sent — the run stops at stage 1
@@ -127,7 +128,7 @@ and the auth link is surfaced to the user as plain text in the session (per SPEC
 **Layout (subsections in order):**
 1. **Rates & curve** — 10Y, 2Y, 2s10s spread, Fed funds, SOFR. Primary source is the
    fetched FRED snapshot in `data/summary.json` (with baseline deltas/z-scores when
-   available); Alpha Vantage cross-checks/fills.
+   available); armed data tools / web search cross-check and fill.
 2. **Liquidity & credit** — net liquidity (WALCL − RRP − TGA, from FRED snapshot)
    with its trend vs. baseline, HY OAS as the credit-stress read.
 3. **Inflation & growth** — latest CPI, unemployment, NFP, GDP/retail as available.
@@ -136,8 +137,8 @@ and the auth link is surfaced to the user as plain text in the session (per SPEC
    plus any Fed commentary from WebSearch.
 
 Header carries the macro bias tag (e.g. hawkish / dovish / neutral). If the FRED
-fetch was skipped (no key) or failed, subsections 1-2 fall back to Alpha Vantage /
-WebSearch values, say so in the sources footer, and drop baseline framing.
+fetch was skipped (no key) or failed, subsections 1-2 fall back to armed-tool /
+web-search values, say so in the sources footer, and drop baseline framing.
 
 **Worked example:**
 
@@ -167,7 +168,7 @@ WebSearch values, say so in the sources footer, and drop baseline framing.
 <b>Liquidity read:</b> tightening at the margin — sticky CPI print pushes back
 rate-cut timing; dollar strength a headwind for risk.
 
-<i>🔧 FRED(net_liq,2s10s,SOFR,HY_OAS) · TREASURY_YIELD(10Y,2Y) · FEDERAL_FUNDS_RATE · CPI · UNEMPLOYMENT · NONFARM_PAYROLL · WTI · BRENT · GOLD_SILVER_SPOT · CURRENCY_EXCHANGE_RATE · WebSearch×1</i>
+<i>🔧 FRED(net_liq,2s10s,SOFR,HY_OAS,dollar,wti) · SEARCH(CPI,NFP,GDP) · SEARCH(brent,gold) · WebSearch×1</i>
 ```
 
 ---
@@ -178,7 +179,7 @@ rate-cut timing; dollar strength a headwind for risk.
 1. **Indices** — SPY, QQQ, DIA, IWM with level and % change.
 2. **Volatility / regime** — VIX level and direction; put/call if available.
 3. **Breadth & movers** — top gainers/losers flavor, sector tilt.
-4. **Sentiment & catalysts** — NEWS_SENTIMENT read, notable earnings on deck.
+4. **Sentiment & catalysts** — news/sentiment read, notable earnings on deck.
 
 Header carries the equity regime tag (risk-on / risk-off / mixed). If market is
 closed, header or first line says `(last close, {date})`.
@@ -206,7 +207,7 @@ closed, header or first line says `(last close, {date})`.
 • News sentiment: neutral, tilting cautious on rate path
 • On deck: NFLX, JPM earnings next week
 
-<i>🔧 GLOBAL_QUOTE(SPY,QQQ,DIA,IWM) · MARKET_STATUS · NEWS_SENTIMENT · TOP_GAINERS_LOSERS · EARNINGS_CALENDAR · REALTIME_PUT_CALL_RATIO</i>
+<i>🔧 FRED(vix_close) · QUOTES(SPY,QQQ,DIA,IWM) · SEARCH(market status,breadth) · SEARCH(earnings calendar) · WebSearch×1</i>
 ```
 
 ---
@@ -220,7 +221,9 @@ closed, header or first line says `(last close, {date})`.
    notable per-asset funding extremes. This is the leverage/positioning read.
 3. **Relative strength** — ETH/BTC, SOL flavor; who's leading.
 4. **Risk-appetite read** — crypto as a liquidity/risk proxy, tied back to macro.
-5. **Flow / news** — NEWS_SENTIMENT crypto topic, notable catalysts.
+   Ground it in the `crypto_context` section of `data/summary.json` (Fear & Greed,
+   BTC DVOL, stablecoin cap, BTC dominance) with baseline framing when available.
+5. **Flow / news** — crypto news/sentiment read, notable catalysts.
 
 Header carries the crypto tone (bid / heavy / chop). If the Hyperliquid fetch
 failed, the Derivatives subsection states that plainly and the baseline framing is
@@ -245,12 +248,14 @@ dropped, not invented.
 • ETH/BTC soft — BTC still the anchor
 • SOL leading the high-beta bid
 
-<b>Risk-appetite read:</b> crypto firm despite a firmer dollar — reads as
-independent risk appetite / crypto-specific flows, not broad risk-on.
+<b>Risk-appetite read:</b> Fear & Greed 26 (Fear) vs 30-run mean 31; DVOL 36 ▬
+flat; stablecoin cap $311B ▲ +0.4% w/w — cautious positioning, dry powder
+building. Crypto firm despite a firmer dollar — reads as independent risk
+appetite / crypto-specific flows, not broad risk-on.
 
 <b>Flow / news:</b> sentiment positive; ETF inflows cited as support.
 
-<i>🔧 Hyperliquid(OI,funding) · DIGITAL_CURRENCY_DAILY(BTC,ETH,SOL) · CRYPTO_INTRADAY · NEWS_SENTIMENT(blockchain)</i>
+<i>🔧 Hyperliquid(OI,funding) · CoinGecko(mcap,dominance) · FearGreed · DefiLlama(stables) · Deribit(DVOL) · SEARCH(BTC,ETH,SOL) · WebSearch×1</i>
 ```
 
 ---
@@ -262,7 +267,7 @@ independent risk appetite / crypto-specific flows, not broad risk-on.
    change on one line each or paired. Dispersion is the point (SPEC.md), so show
    each name, do not average them away.
 2. **Semis** — SMH level/direction.
-3. **AI-cycle / product / regulatory** — WebSearch-driven narrative beats.
+3. **AI-cycle / product / regulatory** — web-search-driven narrative beats.
 4. **Catalysts** — upcoming tech earnings.
 
 Header carries the tech tone (leadership intact / rotating out / dispersed).
@@ -288,7 +293,7 @@ Header carries the tech tone (leadership intact / rotating out / dispersed).
 
 <b>Catalysts:</b> MSFT, GOOGL earnings in ~2 weeks
 
-<i>🔧 GLOBAL_QUOTE(AAPL,MSFT,NVDA,GOOGL,AMZN,META,SMH) · NEWS_SENTIMENT(technology) · EARNINGS_CALENDAR · WebSearch×2</i>
+<i>🔧 QUOTES(AAPL,MSFT,NVDA,GOOGL,AMZN,META,SMH) · SEARCH(tech news,earnings) · WebSearch×2</i>
 ```
 
 ---
@@ -301,8 +306,9 @@ Header carries the tech tone (leadership intact / rotating out / dispersed).
 2. **Active tensions** — conflicts, sanctions, tariffs/trade.
 3. **Market linkage** — one line per item on what it means for the tape.
 
-WebSearch/WebFetch only (Alpha Vantage has no geopolitical data). Header carries
-the risk temperature (calm / elevated / acute).
+Live web search/WebFetch driven, plus `data/catalysts.json` for scheduled US
+catalysts — the world-affairs sweep always runs live (CLAUDE.md Stage 3 hard
+rule). Header carries the risk temperature (calm / elevated / acute).
 
 **Worked example:**
 
@@ -322,7 +328,7 @@ the risk temperature (calm / elevated / acute).
 • Oil premium = mild inflation/energy-equity tailwind, growth headwind
 • Tariff noise = periodic risk-off spikes, semis most exposed
 
-<i>🔧 WebSearch×4 · WebFetch×1 · EARNINGS_CALENDAR · IPO_CALENDAR</i>
+<i>🔧 FRED(calendar) · WebSearch×3 · WebFetch×1</i>
 ```
 
 ---
@@ -381,8 +387,9 @@ you want to stand out, not for layout.
 Two surfaces, both terse.
 
 **A. Upfront inventory (Message 1).** Grouped and counted, never one-line-per-tool.
-Alpha Vantage exposes ~128 actions; listing them all would be noise. Format:
-`<b>Data tools:</b> Alpha Vantage MCP ({n} actions) ✅ · WebSearch ✅ · WebFetch ✅`.
+A connector can expose dozens of actions; listing them all would be noise. Format:
+`<b>Data tools:</b> {connector} ({n} tools) ✅ · WebSearch ✅ · WebFetch ✅`,
+naming whatever connectors are actually armed this session (e.g. Exa, Composio).
 Add a `<b>Notes:</b>` line only when something is degraded or missing.
 
 **B. Per-domain sources footer (Messages 2-6).** One italic line, preceded by a
@@ -390,15 +397,18 @@ blank line, last thing in the message. Wrench prefix, tools separated by ` · `,
 arguments in parentheses compacted:
 
 ```
-<i>🔧 GLOBAL_QUOTE(SPY,QQQ) · NEWS_SENTIMENT(technology) · WebSearch×2</i>
+<i>🔧 QUOTES(SPY,QQQ) · SEARCH(tech news) · WebSearch×2</i>
 ```
 
 Rules for the footer:
+- Footers record the names the run's tools *actually* have — `QUOTES(...)` /
+  `SEARCH(...)` above are illustrative shapes, not fixed identifiers.
 - Script-fetched sources appear first, named by source not by tool:
-  `FRED(net_liq,2s10s)`, `Hyperliquid(OI,funding)`.
+  `FRED(net_liq,2s10s)`, `Hyperliquid(OI,funding)`, `CoinGecko(mcap,dominance)`,
+  `DefiLlama(stables)`, `Deribit(DVOL)`, `FRED(calendar)`.
 - Collapse repeated calls: `WebSearch×2`, not two entries.
-- Compact multi-symbol calls: `GLOBAL_QUOTE(SPY,QQQ,DIA,IWM)`, one entry.
-- If a tool was tried and fell back, mark it: `REALTIME_PUT_CALL_RATIO✗→WebSearch`.
+- Compact multi-symbol calls: `QUOTES(SPY,QQQ,DIA,IWM)`, one entry.
+- If a tool was tried and fell back, mark it: `TOOL✗→WebSearch` (real tool name).
 - Never include payloads or return values. Debug means *which tools ran*, not what
   they returned.
 
@@ -573,10 +583,11 @@ name. Instead:
   parameter names from the discovered tool's schema at run time, since Composio
   action schemas vary.
 - If no matching send tool is found in the inventory, treat it as "Telegram
-  unavailable": run `mcp__composio__authenticate`, surface the auth link to the user
+  unavailable": run the Composio authenticate action (discovered in the live
+  inventory — its exact name varies), surface the auth link to the user
   as plain text in the session, and **stop the run** before data gathering (SPEC.md
-  stage 1 and failure handling). Do not loop on `complete_authentication` — it needs
-  a user-supplied code; one attempt, then stop and report.
+  stage 1 and failure handling). Do not loop on the complete-authentication
+  action — it needs a user-supplied code; one attempt, then stop and report.
 - Send the 8 messages **in order, sequentially**, each as its own send call. If one
   send fails, retry that message once, then continue with the rest rather than
   aborting — a missing middle message is better than a truncated run, and the

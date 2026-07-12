@@ -5,17 +5,17 @@ rotating out|dispersed}{, qualifier}</b>`. Full layout/worked example:
 DESIGN.md §2, Message 5. Ticker universe (SPEC.md): AAPL, MSFT, NVDA, GOOGL,
 AMZN, META, plus SMH (semis).
 
-## Tool sequence
+## Capability sequence
 
-1. `mcp__claude_ai_Alpha_Vantage_MCP_Server__REALTIME_BULK_QUOTES` (preferred,
-   one call) or `mcp__claude_ai_Alpha_Vantage_MCP_Server__GLOBAL_QUOTE` per
-   symbol — AAPL, MSFT, NVDA, GOOGL, AMZN, META, and SMH. Level + signed % each.
-2. `mcp__claude_ai_Alpha_Vantage_MCP_Server__NEWS_SENTIMENT` — topic
-   `technology`, for AI-cycle/product/regulatory narrative beats.
-3. `mcp__claude_ai_Alpha_Vantage_MCP_Server__EARNINGS_CALENDAR` — filtered to
-   these six names, next 2-4 weeks.
-4. `WebSearch` — one to two queries filling gaps `NEWS_SENTIMENT` doesn't cover
-   well, e.g. `"AI capex datacenter spending news this week"`,
+Gather using whatever armed tool provides each capability (bound in Stage 1)
+or `WebSearch` if none does:
+
+1. **Per-name quotes** — AAPL, MSFT, NVDA, GOOGL, AMZN, META, and SMH. Level +
+   signed % each; batch into one call/search where the tool allows.
+2. **Tech news + sentiment** — for AI-cycle/product/regulatory narrative beats.
+3. **Earnings calendar** — filtered to these six names, next 2-4 weeks.
+4. **Live web search** — one to two queries filling gaps the news read doesn't
+   cover well, e.g. `"AI capex datacenter spending news this week"`,
    `"{ticker} antitrust regulatory news"` for whichever name has an active
    storyline.
 
@@ -25,14 +25,15 @@ AMZN, META, plus SMH (semis).
   (SPEC.md); never average them into one sector figure.
 - SMH level + signed %, and a one-clause read on whether semis breadth is wide
   or concentrated in one name (commonly NVDA).
-- Two to three AI-cycle/product/regulatory narrative beats from
-  `NEWS_SENTIMENT` + WebSearch — compressed to one line each.
+- Two to three AI-cycle/product/regulatory narrative beats from the news read +
+  web search — compressed to one line each.
 - Upcoming earnings among the six, with rough timing (`~2 weeks`, exact date if
   short-dated).
 
-## Fallback if a tool fails or is missing
+## Fallback if a capability has no tool or a tool fails
 
-- `ToolSearch` first for any not-yet-loaded Alpha Vantage tool.
+- `ToolSearch` the live inventory first (deferred tools don't appear until
+  requested).
 - Still failing after one retry: degrade to `WebSearch`
   (`"{ticker} stock price today"` per missing name, or `"mega-cap tech stocks
   today Nasdaq"` for a batch read) and mark `TOOL✗→WebSearch` in the footer.

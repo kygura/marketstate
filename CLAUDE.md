@@ -29,15 +29,17 @@ of **every** run, before any data gathering.
 
 1. **Enumerate what's already loaded** in this session (any `mcp__*` tools visible
    without a ToolSearch call, plus built-in `WebSearch`/`WebFetch`).
-2. **Load the Alpha Vantage MCP tools.** They are deferred in the runtime session —
-   they will not appear until requested. Call `ToolSearch` for them, e.g.:
-   - `ToolSearch(query: "select:mcp__claude_ai_Alpha_Vantage_MCP_Server__GLOBAL_QUOTE,mcp__claude_ai_Alpha_Vantage_MCP_Server__TREASURY_YIELD,...")`
-     naming the specific tools this run's domains will need, or a keyword search
-     (`"Alpha Vantage"`) if unsure which names apply. Load once, up front, not
-     mid-domain — a mid-domain miss should still fall back per the failure table
-     below rather than trigger a second inventory pass.
-   - Domain playbooks in `domains/*.md` each name the exact tools they call; load
-     the union of those before Stage 3 starts.
+2. **Bind capabilities to whatever tools are armed.** The toolset varies by
+   session — do not assume any specific data connector exists (typical sessions
+   carry Exa search/research tools and Composio actions, but never rely on
+   that). Domain playbooks in `domains/*.md` express their needs as *data
+   capabilities* (quotes, news/sentiment, calendars, market status…). For each
+   capability, search the live inventory (`ToolSearch`, keyword) for an armed
+   tool that provides it and bind it by shape, the same way the Telegram send
+   tool is discovered below. Do this once, up front, not mid-domain — a
+   mid-domain miss should still fall back per the failure table below rather
+   than trigger a second inventory pass. A capability with no matching tool
+   falls back to `WebSearch` — that is normal, not an error.
 3. **Discover the Telegram send tool.** Composio's tool name for "send a Telegram
    message" is not fixed and must never be hardcoded (DESIGN.md §8). Search the
    live tool inventory (ToolSearch, keyword or listing) for a Composio action whose
@@ -47,11 +49,12 @@ of **every** run, before any data gathering.
    its schema to learn the exact parameter names (chat/target id, text, parse mode)
    at call time, since Composio schemas vary between sessions.
 4. **Gate on delivery capability.** If no matching Telegram send tool is found:
-   - Run `mcp__composio__authenticate` **once**.
+   - Run the Composio **authenticate** action (find it in the live inventory —
+     its exact name varies) **once**.
    - Surface the returned auth link as **plain text to the user in this session**
      (not to Telegram — it isn't connected yet).
-   - **Stop the run.** Do not proceed to Stage 2. Do not loop on
-     `mcp__composio__complete_authentication` — it needs a user-supplied code, so
+   - **Stop the run.** Do not proceed to Stage 2. Do not loop on the matching
+     complete-authentication action — it needs a user-supplied code, so
      one attempt then stop-and-report is correct. Rerun the whole routine once the
      user confirms the connection.
 5. If the Telegram tool **is** found, continue. Message 1 (Debug) is composed
@@ -74,15 +77,28 @@ bun run fetch
 
 (via Bash, working directory `/home/athan/projects/marketstate` or wherever this
 repo lives). It pulls the direct API sources — FRED (net liquidity = WALCL − RRP −
-TGA, 2s10s, SOFR, HY OAS) and Hyperliquid (perp total OI, OI deltas, funding
-skew) — validates responses, appends timestamped snapshots under `data/snapshots/`,
-and rewrites `data/summary.json`.
+TGA, 2s10s, SOFR, HY OAS, plus VIX prior close, broad dollar index, 10Y breakeven,
+WTI, 3M bill), Hyperliquid (perp total OI, OI deltas, funding skew), and the
+crypto-context set (CoinGecko total mcap + BTC dominance, alternative.me Fear &
+Greed, DefiLlama stablecoin cap, Deribit BTC DVOL) — validates responses, appends
+timestamped snapshots under `data/snapshots/`, and rewrites `data/summary.json`.
+It also pulls the FRED release calendar and writes `data/catalysts.json` (upcoming
+major US economic releases, plus FOMC rate-decision dates merged from the
+repo-persisted Fed schedule in `src/fomc.ts`), read by the Geopolitics playbook in
+Stage 3.
+
+**Persist the snapshot data.** `data/` is committed to the repo — after the fetch
+succeeds, commit the new snapshot files and rewritten summary/catalysts in one
+conventional commit (e.g. `chore(data): snapshot 2026-07-12`) before moving on. If
+the fetch failed entirely there is nothing new to commit — skip this step. Do not
+push unless the user has asked for that.
 
 Then **Read `data/summary.json`**. It is the ONE quantitative ground-truth file
 for the run: per metric it carries the latest value, delta vs. previous snapshot,
 baseline stats (rolling means, z-score vs. the 30-window), and per-source status
-(`ok` / `skipped:no-key` / `error:<reason>`). Read it before any MCP calls; the
-Macro and Crypto playbooks treat it as their primary source.
+(`ok` / `skipped:no-key` / `error:<reason>`) — sections `fred`, `hyperliquid`,
+`crypto_context`, plus a small `catalysts` status field. Read it before any MCP
+calls; the Macro and Crypto playbooks treat it as their primary source.
 
 Failure handling (SPEC.md):
 
@@ -93,7 +109,7 @@ Failure handling (SPEC.md):
 - **`FRED_API_KEY` missing**: the fetcher degrades gracefully — `data/summary.json`
   shows FRED as `skipped:no-key`, Hyperliquid data is still valid. Flag it in the
   debug message (`FRED skipped (no key)`) and in the Macro sources footer; Macro
-  falls back to Alpha Vantage/WebSearch for the affected series.
+  falls back to armed data tools/WebSearch for the affected series.
 - Respect the summary's warming-up flag: if it reports `baseline: warming up`
   (fewer than 5 snapshots), use deltas only — no z-score language.
 
@@ -107,7 +123,15 @@ build; this runbook only executes it and reads its output.
 Order: **Macro & Liquidity → Equities → Crypto → Tech → Geopolitics & Catalysts.**
 This order is fixed — it matches the message sequence in SPEC.md and DESIGN.md.
 Macro and Crypto lean on the Stage 2 snapshot data first (FRED series, Hyperliquid
-OI/funding) and use MCP tools to fill what the fetcher doesn't cover.
+OI/funding, crypto context) and use the tools bound in Stage 1 to fill what the
+fetcher doesn't cover.
+
+**Hard rule — live web search for world affairs.** The Geopolitics domain's
+`Active tensions` world-affairs sweep MUST run via live web search
+(`WebSearch`, an armed Exa-style search tool, or equivalent) on **every** run.
+The briefing serves a reader who is checked out from the news; script-sourced
+data and cached files never replace that sweep. `data/catalysts.json` covers
+scheduled US catalysts only.
 
 For each domain, open its playbook and follow it exactly:
 
@@ -119,9 +143,11 @@ For each domain, open its playbook and follow it exactly:
 | Tech / Mega-cap | `domains/tech.md` |
 | Geopolitics & Catalysts | `domains/geopolitics.md` |
 
-Each playbook gives: the exact tool-call sequence, what to extract from each
-response, the fallback if a tool is missing/errors/empty, and the exact content
-the domain's Telegram message must contain.
+Each playbook gives: the data capabilities to gather (in priority order:
+script-sourced snapshot data, then armed tools, then web search), what to
+extract from each, the fallback if a capability has no tool or a tool
+errors/returns empty, and the exact content the domain's Telegram message must
+contain.
 
 **While executing each playbook, record which tools and sources were actually
 used** (real calls, not just attempted) — this feeds directly into that domain's
@@ -262,16 +288,20 @@ to the reader.
 ## Debug / sources-footer convention
 
 - **Message 1** is the *grouped* connector inventory — counts and categories
-  (`Alpha Vantage MCP ({n} actions) ✅ · WebSearch ✅ · WebFetch ✅`), never a
-  per-tool enumeration.
+  of whatever is armed this session (e.g. `Exa ({n} tools) ✅ · Composio
+  (Telegram) ✅ · WebSearch ✅ · WebFetch ✅`), never a per-tool enumeration.
 - **Messages 2-6** each end with exactly one italic sources-footer line,
   separated from the analysis by a blank line, last thing in the message:
   `<i>🔧 TOOL(args) · TOOL×n</i>`
+  - Footers record the names the run's tools *actually* have — the examples
+    here are illustrative shapes, not fixed identifiers.
   - Collapse repeated calls (`WebSearch×2`), compact multi-symbol calls into one
-    entry (`GLOBAL_QUOTE(SPY,QQQ,DIA,IWM)`).
+    entry (`QUOTES(SPY,QQQ,DIA,IWM)` for whatever quote tool was used).
   - Script-sourced data from Stage 2 appears alongside MCP tools, compacted the
-    same way: `FRED(net_liq,2s10s)`, `Hyperliquid(OI,funding)`.
-  - Mark a fallback explicitly: `REALTIME_PUT_CALL_RATIO✗→WebSearch`.
+    same way: `FRED(net_liq,2s10s)`, `Hyperliquid(OI,funding)`,
+    `CoinGecko(mcap,dominance)`, `DefiLlama(stables)`, `Deribit(DVOL)`,
+    `FRED(calendar)`.
+  - Mark a fallback explicitly: `TOOL✗→WebSearch` (using the real tool name).
   - Never include payloads or return values — debug means *which tools ran*, not
     what they returned.
 - **Messages 1, 7, 8 have no sources footer.** Debug *is* the inventory; 7 and 8
@@ -284,12 +314,13 @@ to the reader.
 | Situation | Handling |
 |---|---|
 | Fetch script fails entirely | Continue on MCP/WebSearch data alone. Flag `Fetch: FAILED (<reason>)` in the debug message. Drop baseline framing from every message — never invent baselines. |
-| `FRED_API_KEY` missing | Fetcher writes `skipped:no-key` into `data/summary.json` and continues (Hyperliquid still valid). Flag in the debug message and the Macro sources footer; Macro fills the gap via Alpha Vantage/WebSearch. |
-| Market closed | Call `MARKET_STATUS` first (Equities playbook). If closed, the Equities message states last close explicitly, labeled as such — never presented as real-time. |
-| Missing/deferred tool | `ToolSearch` for it first (any `mcp__claude_ai_Alpha_Vantage_MCP_Server__*` name not yet visible). If still unavailable, fall back to `WebSearch` for that data point and note it in the sources footer (`TOOL✗→WebSearch`). |
+| `FRED_API_KEY` missing | Fetcher writes `skipped:no-key` into `data/summary.json` and continues (Hyperliquid still valid). Flag in the debug message and the Macro sources footer; Macro fills the gap via armed tools/WebSearch. |
+| Market closed | Determine market open/closed first (Equities playbook — an armed market-status capability, else WebSearch). If closed, the Equities message states last close explicitly, labeled as such — never presented as real-time. |
+| Capability has no armed tool | `ToolSearch` the live inventory first (deferred tools don't appear until requested). If nothing matches, fall back to `WebSearch` for that data point and note it in the sources footer (`TOOL✗→WebSearch`). This is the expected path for any capability the session isn't armed for. |
 | Rate limit / API error | Retry the call once, then degrade to `WebSearch` for that data point and note the degradation in the sources footer. Never fail the whole run over one tool. |
 | Domain fails entirely | Still send that domain's message, stating plainly what's missing — never skip a message in the fixed sequence. |
-| Telegram/Composio unavailable | Run `mcp__composio__authenticate` once, surface the auth link as plain text to the user in-session, **stop the run before data gathering** (Stage 1). Do not loop `complete_authentication`. |
+| World-affairs sweep | Never skipped, never served from cache — live web search on every run (see Stage 3 hard rule). |
+| Telegram/Composio unavailable | Run the Composio authenticate action (from the live inventory) once, surface the auth link as plain text to the user in-session, **stop the run before data gathering** (Stage 1). Do not loop the complete-authentication action. |
 
 ---
 
@@ -318,9 +349,10 @@ to the reader.
 - `SPEC.md` — pipeline contract, failure handling, guardrails.
 - `DESIGN.md` — message layouts, worked examples, formatting rules (the authority
   for exact wording/structure — this file only summarizes and points at it).
-- `domains/*.md` — one playbook per domain: tool sequence, extraction, fallback,
-  message content.
+- `domains/*.md` — one playbook per domain: capability sequence, extraction,
+  fallback, message content.
 - `src/` — the bun + TypeScript fetcher behind `bun run fetch` (owned by its own
   build; this runbook never modifies it).
 - `data/` — snapshots and `data/summary.json`, written by the fetcher, read in
-  Stage 2 (gitignored, machine-local).
+  Stage 2 (committed to the repo — the routine runs daily and each run's
+  snapshot is persisted; see Stage 2's commit step).
