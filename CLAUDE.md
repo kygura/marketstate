@@ -29,17 +29,15 @@ of **every** run, before any data gathering.
 
 1. **Enumerate what's already loaded** in this session (any `mcp__*` tools visible
    without a ToolSearch call, plus built-in `WebSearch`/`WebFetch`).
-2. **Bind capabilities to whatever tools are armed.** The toolset varies by
-   session — do not assume any specific data connector exists (typical sessions
-   carry Exa search/research tools and Composio actions, but never rely on
-   that). Domain playbooks in `domains/*.md` express their needs as *data
-   capabilities* (quotes, news/sentiment, calendars, market status…). For each
-   capability, search the live inventory (`ToolSearch`, keyword) for an armed
-   tool that provides it and bind it by shape, the same way the Telegram send
-   tool is discovered below. Do this once, up front, not mid-domain — a
-   mid-domain miss should still fall back per the failure table below rather
-   than trigger a second inventory pass. A capability with no matching tool
-   falls back to `WebSearch` — that is normal, not an error.
+2. **Composio is the bridge to this session's connector tools, scoped to one
+   job here: Telegram delivery.** Domain playbooks in `domains/*.md` express
+   their needs as *data capabilities* (quotes, news/sentiment, calendars,
+   market status…) — every one of those is met by the script-sourced data from
+   `bun run fetch` (Stage 2) or by the agent's native `WebSearch`, never by
+   binding some other armed connector/MCP tool for data. Do not search the live
+   inventory for a quotes/news/calendar tool to bind — that step is gone. The
+   only inventory search in this stage is the Telegram send tool in step 3
+   below.
 3. **Discover the Telegram send tool.** Composio's tool name for "send a Telegram
    message" is not fixed and must never be hardcoded (DESIGN.md §8). Search the
    live tool inventory (ToolSearch, keyword or listing) for a Composio action whose
@@ -124,15 +122,14 @@ build; this runbook only executes it and reads its output.
 Order: **Macro & Liquidity → Equities → Crypto → Tech → Geopolitics & Catalysts.**
 This order is fixed — it matches the message sequence in SPEC.md and DESIGN.md.
 Macro and Crypto lean on the Stage 2 snapshot data first (FRED series, Hyperliquid
-OI/funding, crypto context) and use the tools bound in Stage 1 to fill what the
-fetcher doesn't cover.
+OI/funding, crypto context) and use `WebSearch` to fill what the fetcher doesn't
+cover.
 
 **Hard rule — live web search for world affairs.** The Geopolitics domain's
-`Active tensions` world-affairs sweep MUST run via live web search
-(`WebSearch`, an armed Exa-style search tool, or equivalent) on **every** run.
-The briefing serves a reader who is checked out from the news; script-sourced
-data and cached files never replace that sweep. `data/catalysts.json` covers
-scheduled US catalysts only.
+`Active tensions` world-affairs sweep MUST run via live web search (`WebSearch`)
+on **every** run. The briefing serves a reader who is checked out from the news;
+script-sourced data and cached files never replace that sweep.
+`data/catalysts.json` covers scheduled US catalysts only.
 
 For each domain, open its playbook and follow it exactly:
 
@@ -145,18 +142,17 @@ For each domain, open its playbook and follow it exactly:
 | Geopolitics & Catalysts | `domains/geopolitics.md` |
 
 Each playbook gives: the data capabilities to gather (in priority order:
-script-sourced snapshot data, then armed tools, then web search), what to
-extract from each, the fallback if a capability has no tool or a tool
-errors/returns empty, and the exact content the domain's Telegram message must
-contain.
+script-sourced snapshot data, then `WebSearch`), what to extract from each, the
+fallback if `WebSearch` returns nothing usable, and the exact content the
+domain's Telegram message must contain.
 
-**While executing each playbook, record which tools and sources were actually
-used** (real calls, not just attempted) — this feeds directly into that domain's
-sources footer in Stage 5. Track: tool name, the compacted argument list (e.g.
-symbols called with), any script-sourced data (`FRED(net_liq,2s10s)`,
-`Hyperliquid(OI,funding)`), and any fallback that fired (`TOOL✗→WebSearch`). Do
-this bookkeeping as you go; reconstructing it after the fact from memory is
-error-prone.
+**While executing each playbook, record which sources were actually used**
+(real calls, not just attempted) — this feeds directly into that domain's
+sources footer in Stage 5. Track: script-sourced data (`FRED(net_liq,2s10s)`,
+`Hyperliquid(OI,funding)`), `WebSearch` calls made (compacted, e.g. symbols
+searched), and any point where script data was unavailable and `WebSearch`
+substituted (`FRED✗→WebSearch`). Do this bookkeeping as you go; reconstructing
+it after the fact from memory is error-prone.
 
 If a domain fails entirely (every tool in its playbook errors and its WebSearch
 fallback turns up nothing usable), do not skip it — proceed to Stage 5 and send
@@ -240,8 +236,9 @@ example and exact subsection wording):
 1. **Debug** — `🛠️ <b>marketstate run</b> — {UTC timestamp}` then bold-labeled
    lines: `Delivery:`, `Fetch:` (per-source status from `data/summary.json`, e.g.
    `<b>Fetch:</b> FRED ✅ · Hyperliquid ✅`, or `FRED skipped (no key)`, or
-   `FAILED (<reason>)`), `Data tools:` (grouped/counted, never per-tool), `Market
-   status:`, optional `Notes:` for degradations, italic domains-to-follow line.
+   `FAILED (<reason>)`), `Data tools:` (`WebSearch` call count + script sources
+   used, grouped/counted, never per-call detail), `Market status:`, optional
+   `Notes:` for degradations, italic domains-to-follow line.
 2. **Macro** — header with hawkish/dovish/neutral bias tag, then `Rates & curve`,
    `Inflation & growth`, `Dollar & commodities`, `Liquidity read` subsections.
 3. **Equities** — header with risk-on/risk-off/mixed tag (+ last-close note if
@@ -289,22 +286,24 @@ to the reader.
 ## Debug / sources-footer convention
 
 - **Message 1** is the *grouped* connector inventory — counts and categories
-  of whatever is armed this session (e.g. `Exa ({n} tools) ✅ · Composio
-  (Telegram) ✅ · WebSearch ✅ · WebFetch ✅`), never a per-tool enumeration.
+  of what's actually used this run (e.g. `Composio (Telegram) ✅ · WebSearch
+  ({n} calls) ✅ · WebFetch ✅`), never a per-call enumeration. Composio's only
+  role in this pipeline is the Telegram bridge — it is not a data source.
 - **Messages 2-6** each end with exactly one italic sources-footer line,
   separated from the analysis by a blank line, last thing in the message:
-  `<i>🔧 TOOL(args) · TOOL×n</i>`
-  - Footers record the names the run's tools *actually* have — the examples
-    here are illustrative shapes, not fixed identifiers.
-  - Collapse repeated calls (`WebSearch×2`), compact multi-symbol calls into one
-    entry (`QUOTES(SPY,QQQ,DIA,IWM)` for whatever quote tool was used).
-  - Script-sourced data from Stage 2 appears alongside MCP tools, compacted the
-    same way: `FRED(net_liq,2s10s)`, `Hyperliquid(OI,funding)`,
+  `<i>🔧 SOURCE(args) · SOURCE×n</i>`
+  - Sources are only script-sourced data and `WebSearch` — never a third-party
+    connector tool; Composio never appears in a domain footer.
+  - Collapse repeated calls (`WebSearch×2`), compact multi-symbol lookups into
+    one entry (`WebSearch(SPY,QQQ,DIA,IWM quotes)`).
+  - Script-sourced data from Stage 2 is compacted the same way:
+    `FRED(net_liq,2s10s)`, `Hyperliquid(OI,funding)`,
     `CoinGecko(mcap,dominance)`, `DefiLlama(stables)`, `Deribit(DVOL)`,
     `FRED(calendar)`.
-  - Mark a fallback explicitly: `TOOL✗→WebSearch` (using the real tool name).
-  - Never include payloads or return values — debug means *which tools ran*, not
-    what they returned.
+  - Mark it when script data was unavailable and `WebSearch` substituted:
+    `FRED✗→WebSearch`.
+  - Never include payloads or return values — debug means *which sources ran*,
+    not what they returned.
 - **Messages 1, 7, 8 have no sources footer.** Debug *is* the inventory; 7 and 8
   synthesize data already cited in 2-6.
 
@@ -317,7 +316,7 @@ to the reader.
 | Fetch script fails entirely | Continue on MCP/WebSearch data alone. Flag `Fetch: FAILED (<reason>)` in the debug message. Drop baseline framing from every message — never invent baselines. |
 | `FRED_API_KEY` missing | Fetcher writes `skipped:no-key` into `data/summary.json` and continues (Hyperliquid still valid). Flag in the debug message and the Macro sources footer; Macro fills the gap via armed tools/WebSearch. |
 | Market closed | Determine market open/closed first (Equities playbook — an armed market-status capability, else WebSearch). If closed, the Equities message states last close explicitly, labeled as such — never presented as real-time. |
-| Capability has no armed tool | `ToolSearch` the live inventory first (deferred tools don't appear until requested). If nothing matches, fall back to `WebSearch` for that data point and note it in the sources footer (`TOOL✗→WebSearch`). This is the expected path for any capability the session isn't armed for. |
+| Capability not covered by scripts | Fall back to `WebSearch` for that data point and note it in the sources footer (`FRED✗→WebSearch`-style). Scripts + `WebSearch` are the only two data sources — this is the normal path, not an error. |
 | Rate limit / API error | Retry the call once, then degrade to `WebSearch` for that data point and note the degradation in the sources footer. Never fail the whole run over one tool. |
 | Domain fails entirely | Still send that domain's message, stating plainly what's missing — never skip a message in the fixed sequence. |
 | World-affairs sweep | Never skipped, never served from cache — live web search on every run (see Stage 3 hard rule). |
