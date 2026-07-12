@@ -89,9 +89,10 @@ Stage 3.
 
 **Persist the snapshot data.** `data/` is committed to the repo — after the fetch
 succeeds, commit the new snapshot files and rewritten summary/catalysts in one
-conventional commit (e.g. `chore(data): snapshot 2026-07-12`) before moving on. If
-the fetch failed entirely there is nothing new to commit — skip this step. Do not
-push unless the user has asked for that.
+conventional commit (e.g. `chore(data): snapshot 2026-07-12`) before moving on,
+then `git push` so the history reaches the remote (`origin`). If the fetch failed
+entirely there is nothing new to commit — skip this step. If the push fails
+(offline, auth), note it and continue the run — delivery matters more.
 
 Then **Read `data/summary.json`**. It is the ONE quantitative ground-truth file
 for the run: per metric it carries the latest value, delta vs. previous snapshot,
