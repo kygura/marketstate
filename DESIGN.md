@@ -563,32 +563,41 @@ isolation.
 
 ---
 
-## 8. Composio Telegram delivery mechanics
+## 8. Telegram delivery mechanics — direct Bot API primary, Composio fallback
 
-Composio's MCP tool names for Telegram are **not known ahead of time** and may vary
-between sessions/connector versions. The runbook must never hardcode a specific tool
-name. Instead:
+Delivery has two paths. **Direct Bot API is primary** — it's a single HTTPS call
+per message instead of Composio's multi-step tool-search/execute overhead.
+**Composio is the fallback** when direct isn't available or errors.
 
-- In the **connector inventory step (stage 1)**, discover the Telegram send tool by
-  searching the live tool inventory for a Composio action whose name indicates
-  sending a Telegram message (look for names containing both a Telegram marker and a
-  send/message marker, e.g. something like `*TELEGRAM*SEND*MESSAGE*`). Bind that
-  discovered name to a local reference the rest of the run uses.
-- Refer to it in the runbook generically as **"the Telegram send-message tool
-  exposed by Composio, discovered via the connector inventory step"** — not as a
-  fixed identifier.
-- The send call needs, at minimum: the **chat/target id** (from the connected
-  account/config, not hardcoded in the repo — no secrets in the repo per SPEC.md),
-  the **text**, and **`parse_mode = "HTML"`**. The implementer confirms the exact
+- In the **connector inventory step (stage 1)**, check the environment for
+  `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (loaded from `.env`, gitignored —
+  never committed, never hardcoded into a tracked repo file). If both are present,
+  this is the run's delivery path: `POST
+  https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage` with JSON body
+  `{"chat_id": TELEGRAM_CHAT_ID, "text": "...", "parse_mode": "HTML"}`.
+- **If the env vars are missing, or a direct send call errors**, fall back to
+  Composio for that call (and the rest of the run, unless direct recovers).
+  Composio's MCP tool names for Telegram are **not known ahead of time** and may
+  vary between sessions/connector versions — never hardcode a specific tool name.
+  Discover it by searching the live tool inventory for a Composio action whose
+  name indicates sending a Telegram message (look for names containing both a
+  Telegram marker and a send/message marker, e.g. something like
+  `*TELEGRAM*SEND*MESSAGE*`). Bind that discovered name to a local reference —
+  refer to it generically as **"the Telegram send-message tool exposed by
+  Composio, discovered via the connector inventory step"**, not a fixed
+  identifier. It needs, at minimum: the **chat/target id** (from the connected
+  account/config), the **text**, and **`parse_mode = "HTML"`**; confirm the exact
   parameter names from the discovered tool's schema at run time, since Composio
   action schemas vary.
-- If no matching send tool is found in the inventory, treat it as "Telegram
+- If **neither** path is available — no `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`
+  AND no matching Composio send tool in the inventory — treat it as "Telegram
   unavailable": run the Composio authenticate action (discovered in the live
   inventory — its exact name varies), surface the auth link to the user
   as plain text in the session, and **stop the run** before data gathering (SPEC.md
   stage 1 and failure handling). Do not loop on the complete-authentication
   action — it needs a user-supplied code; one attempt, then stop and report.
 - Send the 8 messages **in order, sequentially**, each as its own send call. If one
-  send fails, retry that message once, then continue with the rest rather than
-  aborting — a missing middle message is better than a truncated run, and the
-  sequence numbering/emoji headers make a gap self-evident.
+  send fails, retry that message once (falling back to Composio if direct is the
+  one failing), then continue with the rest rather than aborting — a missing
+  middle message is better than a truncated run, and the sequence
+  numbering/emoji headers make a gap self-evident.
