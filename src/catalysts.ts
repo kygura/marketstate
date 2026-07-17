@@ -3,6 +3,7 @@
 // run-time agent doesn't need WebSearch for scheduled catalysts.
 import { z } from "zod";
 import { FOMC_DECISION_DATES } from "./fomc";
+import { proxyFetch } from "./proxy-fetch";
 
 export type CatalystRelease = { date: string; name: string };
 export type CatalystsResult = {
@@ -66,7 +67,7 @@ export async function fetchCatalysts(now: Date = new Date()): Promise<CatalystsR
       `https://api.stlouisfed.org/fred/releases/dates?api_key=${apiKey}&file_type=json` +
       `&include_release_dates_with_no_data=true&sort_order=asc` +
       `&realtime_start=${day(start)}&realtime_end=${day(end)}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+    const res = await proxyFetch(url, { signal: AbortSignal.timeout(15_000) });
     if (!res.ok) {
       throw new Error(`FRED releases/dates HTTP ${res.status}`);
     }

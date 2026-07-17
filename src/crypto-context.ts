@@ -2,6 +2,7 @@
 // BTC dominance, alternative.me Fear & Greed, DefiLlama stablecoin cap,
 // Deribit BTC DVOL (implied vol index).
 import { z } from "zod";
+import { proxyFetch } from "./proxy-fetch";
 
 export type CryptoContextResult = {
   status: "ok" | `error:${string}`;
@@ -37,7 +38,7 @@ const DeribitSchema = z.object({
 });
 
 async function getJson(url: string): Promise<unknown> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  const res = await proxyFetch(url, { signal: AbortSignal.timeout(15_000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
