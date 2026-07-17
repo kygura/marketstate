@@ -1,6 +1,7 @@
 // FRED (Federal Reserve Economic Data) fetcher.
 // Docs: https://fred.stlouisfed.org/docs/api/fred/series_observations.html
 import { z } from "zod";
+import { proxyFetch } from "./proxy-fetch";
 
 export const FRED_SERIES = [
   "WALCL",
@@ -42,7 +43,7 @@ const OBS_LIMIT = 5;
 
 async function fetchSeries(seriesId: FredSeriesId, apiKey: string): Promise<MetricValue | null> {
   const url = `https://api.stlouisfed.org/fred/series/observations?series_id=${seriesId}&api_key=${apiKey}&file_type=json&sort_order=desc&limit=${OBS_LIMIT}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+  const res = await proxyFetch(url, { signal: AbortSignal.timeout(15_000) });
   if (!res.ok) {
     throw new Error(`FRED ${seriesId} HTTP ${res.status}`);
   }

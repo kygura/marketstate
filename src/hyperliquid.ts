@@ -1,6 +1,7 @@
 // Hyperliquid perp market fetcher (keyless).
 // Docs: https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint
 import { z } from "zod";
+import { proxyFetch } from "./proxy-fetch";
 
 const UniverseAssetSchema = z.object({
   szDecimals: z.number(),
@@ -46,7 +47,7 @@ const TOP_N = 5;
 
 export async function fetchHyperliquid(): Promise<HyperliquidResult> {
   try {
-    const res = await fetch("https://api.hyperliquid.xyz/info", {
+    const res = await proxyFetch("https://api.hyperliquid.xyz/info", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ type: "metaAndAssetCtxs" }),
