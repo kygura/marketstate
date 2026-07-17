@@ -29,59 +29,74 @@ of **every** run, before any data gathering.
 
 1. **Enumerate what's already loaded** in this session (any `mcp__*` tools visible
    without a ToolSearch call, plus built-in `WebSearch`/`WebFetch`).
-2. **Composio is the bridge to this session's connector tools, scoped to one
-   job here: Telegram delivery.** It is never a data source and never appears
-   in a domain sources footer.
-3. **Alpha Vantage MCP is the primary data connector for quote-type
-   capabilities** (equity/index quotes, FX, commodities, fundamentals,
-   earnings calendars, technical indicators) referenced by the domain
-   playbooks in `domains/*.md`. Search the live tool inventory once for it
-   (`ToolSearch`, keyword `"alpha vantage"`) and note whether it's armed this
-   session — this is a capability check, not a gate; unlike Telegram, its
-   absence never stops the run.
-   - **If armed:** it is primary for the capabilities above — domain
-     playbooks call it ahead of `WebSearch` for any data point it covers.
-     It does not replace the Stage 2 script-sourced series (FRED, Hyperliquid,
-     crypto-context remain primary for the specific metrics `bun run fetch`
-     already carries — net liquidity, 2s10s, HY OAS, Hyperliquid OI/funding,
-     Fear & Greed, etc.); Alpha Vantage fills what the fetcher doesn't cover
-     (equity/tech quotes, indices, FX, broader commodities, earnings dates).
-     Footer-credit it by source, e.g. `AlphaVantage(SPY,QQQ,DIA,IWM)`.
+2. **Composio, when used, is the fallback bridge for Telegram delivery only**
+   (see step 4 below — it is not the primary delivery path anymore). It is
+   never a data source and never appears in a domain sources footer.
+3. **Alpha Vantage MCP is a data connector for specific prices/metrics it
+   covers** (it exposes tools for equity/index quotes, FX, commodities,
+   fundamentals, earnings calendars, technical indicators — not a blanket
+   primary source for every capability in `domains/*.md`). Search the live
+   tool inventory once for it (`ToolSearch`, keyword `"alpha vantage"`) and
+   note whether it's armed this session — this is a capability check, not a
+   gate; unlike Telegram, its absence never stops the run.
+   - **If armed:** for the specific price/metric capabilities its tools
+     actually cover (check the tool list/schema, don't assume), call it ahead
+     of `WebSearch` for that data point. It does not replace the Stage 2
+     script-sourced series (FRED, Hyperliquid, crypto-context remain primary
+     for the specific metrics `bun run fetch` already carries — net
+     liquidity, 2s10s, HY OAS, Hyperliquid OI/funding, Fear & Greed, etc.);
+     Alpha Vantage is one more option, alongside `WebSearch`, for whatever
+     the fetcher doesn't cover. Footer-credit it by source, e.g.
+     `AlphaVantage(SPY,QQQ,DIA,IWM)`.
    - **If not armed / unavailable in this environment:** fall back to the
      existing two-source model exactly as before this connector existed —
      script-sourced data (Stage 2) first, then the agent's native `WebSearch`
      for anything the fetcher doesn't cover. Note the absence once in the
      debug message's `Notes:` line (e.g. `Alpha Vantage not armed this
      session → WebSearch fallback`) and continue; do not re-check mid-run.
-   - Confirm via its schema/tool list before relying on it for a specific
-     data point — if a capability isn't actually covered by the connector
-     (e.g. it lacks a series a domain needs), that data point still falls to
-     script-sourced data or `WebSearch` as usual; never invent a capability it
-     doesn't have.
-4. **Discover the Telegram send tool.** Composio's tool name for "send a Telegram
-   message" is not fixed and must never be hardcoded (DESIGN.md §8). Search the
-   live tool inventory (ToolSearch, keyword or listing) for a Composio action whose
-   name contains both a Telegram marker and a send/message marker (e.g. something
-   shaped like `*TELEGRAM*SEND*MESSAGE*`). Bind whatever name is found to a local
-   reference — call it "the Telegram send tool" for the rest of the run — and read
-   its schema to learn the exact parameter names (chat/target id, text, parse mode)
-   at call time, since Composio schemas vary between sessions.
-5. **Gate on delivery capability.** If no matching Telegram send tool is found:
-   - Run the Composio **authenticate** action (find it in the live inventory —
-     its exact name varies) **once**.
-   - Surface the returned auth link as **plain text to the user in this session**
-     (not to Telegram — it isn't connected yet).
-   - **Stop the run.** Do not proceed to Stage 2. Do not loop on the matching
-     complete-authentication action — it needs a user-supplied code, so
-     one attempt then stop-and-report is correct. Rerun the whole routine once the
-     user confirms the connection.
-6. If the Telegram tool **is** found, continue. Message 1 (Debug) is composed
-   after Stage 2 — it combines what was discovered here with the fetch status from
-   `data/summary.json` (see the skeleton below) — but is not sent until Stage 5
-   reaches it in sequence.
+   - Never invent a capability the connector doesn't have — if a specific
+     data point isn't actually covered by its tools, it still falls to
+     script-sourced data or `WebSearch` as usual.
+4. **Determine the Telegram delivery mechanism — direct Bot API is primary,
+   Composio is the fallback.**
+   - Check the environment for `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID`
+     (loaded from `.env`, gitignored — never committed, never hardcoded into
+     a tracked repo file). **If both are set, this is the run's delivery
+     path**: each message is sent as its own HTTPS POST to
+     `https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage` with JSON
+     body `{"chat_id": TELEGRAM_CHAT_ID, "text": "...", "parse_mode":
+     "HTML"}`. This is preferred over Composio — one direct call per message
+     instead of Composio's multi-step tool-search/execute overhead.
+   - **If the env vars are missing, or a direct send call errors**: fall back
+     to Composio for that call (and the rest of the run, unless direct
+     recovers). Composio's tool name for "send a Telegram message" is not
+     fixed and must never be hardcoded (DESIGN.md §8) — search the live tool
+     inventory (ToolSearch, keyword or listing) for a Composio action whose
+     name contains both a Telegram marker and a send/message marker (e.g.
+     something shaped like `*TELEGRAM*SEND*MESSAGE*`). Bind whatever name is
+     found to a local reference — call it "the Telegram send tool" — and read
+     its schema for the exact parameter names at call time, since Composio
+     schemas vary between sessions.
+   - **Gate the run only if both are unavailable**: no `TELEGRAM_BOT_TOKEN`/
+     `TELEGRAM_CHAT_ID` in the environment AND no matching Composio Telegram
+     tool found. In that case:
+     - Run the Composio **authenticate** action (find it in the live inventory —
+       its exact name varies) **once**.
+     - Surface the returned auth link as **plain text to the user in this session**
+       (not to Telegram — it isn't connected yet).
+     - **Stop the run.** Do not proceed to Stage 2. Do not loop on the matching
+       complete-authentication action — it needs a user-supplied code, so
+       one attempt then stop-and-report is correct. Rerun the whole routine once the
+       user confirms a delivery path is available.
+5. If a delivery mechanism **is** confirmed (direct or Composio), continue.
+   Message 1 (Debug) is composed after Stage 2 — it combines what was
+   discovered here with the fetch status from `data/summary.json` (see the
+   skeleton below) — but is not sent until Stage 5 reaches it in sequence.
 
-Never hardcode credentials, chat/target ids, or tool names in this repo. The chat
-id comes from the connected account/config at run time.
+Never hardcode credentials, chat/target ids, or tool names directly in tracked
+repo files. `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` live in `.env`
+(gitignored) and are read from the environment at run time; if falling back to
+Composio, the chat id comes from that connected account/config instead.
 
 ---
 
@@ -142,9 +157,10 @@ build; this runbook only executes it and reads its output.
 Order: **Macro & Liquidity → Equities → Crypto → Tech → Geopolitics & Catalysts.**
 This order is fixed — it matches the message sequence in SPEC.md and DESIGN.md.
 Macro and Crypto lean on the Stage 2 snapshot data first (FRED series, Hyperliquid
-OI/funding, crypto context), then Alpha Vantage (Stage 1) if armed, then
-`WebSearch` to fill whatever neither covers. Equities and Tech lean on Alpha
-Vantage first (if armed) for quotes, then `WebSearch`.
+OI/funding, crypto context); for what that doesn't cover, use Alpha Vantage
+(Stage 1) if armed and it exposes that specific series, else `WebSearch`.
+Equities and Tech likewise check Alpha Vantage for the quote-type data points
+its tools actually cover, then `WebSearch` for the rest.
 
 **Hard rule — live web search for world affairs.** The Geopolitics domain's
 `Active tensions` world-affairs sweep MUST run via live web search (`WebSearch`)
@@ -223,8 +239,11 @@ both before drafting. Summary of the contract:
 ## Stage 5 — Telegram delivery
 
 Send the 8 messages **in order, sequentially, each as its own send call**, using
-the Telegram send tool discovered in Stage 1. `parse_mode` (or the discovered
-tool's equivalent parameter) is always `"HTML"`.
+the delivery mechanism confirmed in Stage 1 — direct Bot API POST if
+`TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` are set, else the Composio Telegram
+send tool. `parse_mode` (or the discovered tool's equivalent parameter) is
+always `"HTML"`. If a direct send call errors mid-run, fall back to Composio
+for the remaining messages rather than aborting.
 
 ### HTML rules (mandatory, SPEC.md, DESIGN.md preamble)
 
@@ -257,7 +276,8 @@ Compact skeleton per message (see the cited DESIGN.md section for the full worke
 example and exact subsection wording):
 
 1. **Debug** — `🛠️ <b>marketstate run</b> — {UTC timestamp}` then bold-labeled
-   lines: `Delivery:`, `Fetch:` (per-source status from `data/summary.json`, e.g.
+   lines: `Delivery:` (`Telegram via direct Bot API ✅` or, on fallback,
+   `Telegram via Composio ✅`), `Fetch:` (per-source status from `data/summary.json`, e.g.
    `<b>Fetch:</b> FRED ✅ · Hyperliquid ✅`, or `FRED skipped (no key)`, or
    `FAILED (<reason>)`), `Data tools:` (Alpha Vantage armed/not-armed status +
    `WebSearch` call count + script sources used, grouped/counted, never
@@ -347,7 +367,8 @@ to the reader.
 | Rate limit / API error (Alpha Vantage or any tool) | Retry the call once, then degrade to the next source down (Alpha Vantage → `WebSearch`, or straight to `WebSearch` if Alpha Vantage isn't armed) for that data point and note the degradation in the sources footer. Never fail the whole run over one tool. |
 | Domain fails entirely | Still send that domain's message, stating plainly what's missing — never skip a message in the fixed sequence. |
 | World-affairs sweep | Never skipped, never served from cache — live web search on every run (see Stage 3 hard rule). |
-| Telegram/Composio unavailable | Run the Composio authenticate action (from the live inventory) once, surface the auth link as plain text to the user in-session, **stop the run before data gathering** (Stage 1). Do not loop the complete-authentication action. |
+| Direct Bot API send fails | Fall back to Composio for that message (and the rest of the run, unless direct recovers) rather than aborting. |
+| Telegram unavailable (no `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` AND no Composio Telegram tool) | Run the Composio authenticate action (from the live inventory) once, surface the auth link as plain text to the user in-session, **stop the run before data gathering** (Stage 1). Do not loop the complete-authentication action. |
 
 ---
 
