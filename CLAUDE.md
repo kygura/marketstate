@@ -30,15 +30,35 @@ of **every** run, before any data gathering.
 1. **Enumerate what's already loaded** in this session (any `mcp__*` tools visible
    without a ToolSearch call, plus built-in `WebSearch`/`WebFetch`).
 2. **Composio is the bridge to this session's connector tools, scoped to one
-   job here: Telegram delivery.** Domain playbooks in `domains/*.md` express
-   their needs as *data capabilities* (quotes, news/sentiment, calendars,
-   market status…) — every one of those is met by the script-sourced data from
-   `bun run fetch` (Stage 2) or by the agent's native `WebSearch`, never by
-   binding some other armed connector/MCP tool for data. Do not search the live
-   inventory for a quotes/news/calendar tool to bind — that step is gone. The
-   only inventory search in this stage is the Telegram send tool in step 3
-   below.
-3. **Discover the Telegram send tool.** Composio's tool name for "send a Telegram
+   job here: Telegram delivery.** It is never a data source and never appears
+   in a domain sources footer.
+3. **Alpha Vantage MCP is the primary data connector for quote-type
+   capabilities** (equity/index quotes, FX, commodities, fundamentals,
+   earnings calendars, technical indicators) referenced by the domain
+   playbooks in `domains/*.md`. Search the live tool inventory once for it
+   (`ToolSearch`, keyword `"alpha vantage"`) and note whether it's armed this
+   session — this is a capability check, not a gate; unlike Telegram, its
+   absence never stops the run.
+   - **If armed:** it is primary for the capabilities above — domain
+     playbooks call it ahead of `WebSearch` for any data point it covers.
+     It does not replace the Stage 2 script-sourced series (FRED, Hyperliquid,
+     crypto-context remain primary for the specific metrics `bun run fetch`
+     already carries — net liquidity, 2s10s, HY OAS, Hyperliquid OI/funding,
+     Fear & Greed, etc.); Alpha Vantage fills what the fetcher doesn't cover
+     (equity/tech quotes, indices, FX, broader commodities, earnings dates).
+     Footer-credit it by source, e.g. `AlphaVantage(SPY,QQQ,DIA,IWM)`.
+   - **If not armed / unavailable in this environment:** fall back to the
+     existing two-source model exactly as before this connector existed —
+     script-sourced data (Stage 2) first, then the agent's native `WebSearch`
+     for anything the fetcher doesn't cover. Note the absence once in the
+     debug message's `Notes:` line (e.g. `Alpha Vantage not armed this
+     session → WebSearch fallback`) and continue; do not re-check mid-run.
+   - Confirm via its schema/tool list before relying on it for a specific
+     data point — if a capability isn't actually covered by the connector
+     (e.g. it lacks a series a domain needs), that data point still falls to
+     script-sourced data or `WebSearch` as usual; never invent a capability it
+     doesn't have.
+4. **Discover the Telegram send tool.** Composio's tool name for "send a Telegram
    message" is not fixed and must never be hardcoded (DESIGN.md §8). Search the
    live tool inventory (ToolSearch, keyword or listing) for a Composio action whose
    name contains both a Telegram marker and a send/message marker (e.g. something
@@ -46,7 +66,7 @@ of **every** run, before any data gathering.
    reference — call it "the Telegram send tool" for the rest of the run — and read
    its schema to learn the exact parameter names (chat/target id, text, parse mode)
    at call time, since Composio schemas vary between sessions.
-4. **Gate on delivery capability.** If no matching Telegram send tool is found:
+5. **Gate on delivery capability.** If no matching Telegram send tool is found:
    - Run the Composio **authenticate** action (find it in the live inventory —
      its exact name varies) **once**.
    - Surface the returned auth link as **plain text to the user in this session**
@@ -55,7 +75,7 @@ of **every** run, before any data gathering.
      complete-authentication action — it needs a user-supplied code, so
      one attempt then stop-and-report is correct. Rerun the whole routine once the
      user confirms the connection.
-5. If the Telegram tool **is** found, continue. Message 1 (Debug) is composed
+6. If the Telegram tool **is** found, continue. Message 1 (Debug) is composed
    after Stage 2 — it combines what was discovered here with the fetch status from
    `data/summary.json` (see the skeleton below) — but is not sent until Stage 5
    reaches it in sequence.
@@ -122,8 +142,9 @@ build; this runbook only executes it and reads its output.
 Order: **Macro & Liquidity → Equities → Crypto → Tech → Geopolitics & Catalysts.**
 This order is fixed — it matches the message sequence in SPEC.md and DESIGN.md.
 Macro and Crypto lean on the Stage 2 snapshot data first (FRED series, Hyperliquid
-OI/funding, crypto context) and use `WebSearch` to fill what the fetcher doesn't
-cover.
+OI/funding, crypto context), then Alpha Vantage (Stage 1) if armed, then
+`WebSearch` to fill whatever neither covers. Equities and Tech lean on Alpha
+Vantage first (if armed) for quotes, then `WebSearch`.
 
 **Hard rule — live web search for world affairs.** The Geopolitics domain's
 `Active tensions` world-affairs sweep MUST run via live web search (`WebSearch`)
@@ -142,17 +163,19 @@ For each domain, open its playbook and follow it exactly:
 | Geopolitics & Catalysts | `domains/geopolitics.md` |
 
 Each playbook gives: the data capabilities to gather (in priority order:
-script-sourced snapshot data, then `WebSearch`), what to extract from each, the
-fallback if `WebSearch` returns nothing usable, and the exact content the
-domain's Telegram message must contain.
+script-sourced snapshot data, then Alpha Vantage if armed, then `WebSearch`),
+what to extract from each, the fallback if `WebSearch` returns nothing usable,
+and the exact content the domain's Telegram message must contain.
 
 **While executing each playbook, record which sources were actually used**
 (real calls, not just attempted) — this feeds directly into that domain's
 sources footer in Stage 5. Track: script-sourced data (`FRED(net_liq,2s10s)`,
-`Hyperliquid(OI,funding)`), `WebSearch` calls made (compacted, e.g. symbols
-searched), and any point where script data was unavailable and `WebSearch`
-substituted (`FRED✗→WebSearch`). Do this bookkeeping as you go; reconstructing
-it after the fact from memory is error-prone.
+`Hyperliquid(OI,funding)`), Alpha Vantage calls (compacted, e.g.
+`AlphaVantage(SPY,QQQ,DIA,IWM)`), `WebSearch` calls made (compacted, e.g.
+symbols searched), and any point where a primary source was unavailable and
+the next one down substituted (`FRED✗→WebSearch`,
+`AlphaVantage✗→WebSearch`). Do this bookkeeping as you go; reconstructing it
+after the fact from memory is error-prone.
 
 If a domain fails entirely (every tool in its playbook errors and its WebSearch
 fallback turns up nothing usable), do not skip it — proceed to Stage 5 and send
@@ -236,9 +259,11 @@ example and exact subsection wording):
 1. **Debug** — `🛠️ <b>marketstate run</b> — {UTC timestamp}` then bold-labeled
    lines: `Delivery:`, `Fetch:` (per-source status from `data/summary.json`, e.g.
    `<b>Fetch:</b> FRED ✅ · Hyperliquid ✅`, or `FRED skipped (no key)`, or
-   `FAILED (<reason>)`), `Data tools:` (`WebSearch` call count + script sources
-   used, grouped/counted, never per-call detail), `Market status:`, optional
-   `Notes:` for degradations, italic domains-to-follow line.
+   `FAILED (<reason>)`), `Data tools:` (Alpha Vantage armed/not-armed status +
+   `WebSearch` call count + script sources used, grouped/counted, never
+   per-call detail), `Market status:`, optional `Notes:` for degradations
+   (including `Alpha Vantage not armed → WebSearch fallback` when applicable),
+   italic domains-to-follow line.
 2. **Macro** — header with hawkish/dovish/neutral bias tag, then `Rates & curve`,
    `Inflation & growth`, `Dollar & commodities`, `Liquidity read` subsections.
 3. **Equities** — header with risk-on/risk-off/mixed tag (+ last-close note if
@@ -292,16 +317,17 @@ to the reader.
 - **Messages 2-6** each end with exactly one italic sources-footer line,
   separated from the analysis by a blank line, last thing in the message:
   `<i>🔧 SOURCE(args) · SOURCE×n</i>`
-  - Sources are only script-sourced data and `WebSearch` — never a third-party
-    connector tool; Composio never appears in a domain footer.
+  - Sources are script-sourced data, Alpha Vantage (when armed), and
+    `WebSearch` — never Composio; it never appears in a domain footer.
   - Collapse repeated calls (`WebSearch×2`), compact multi-symbol lookups into
-    one entry (`WebSearch(SPY,QQQ,DIA,IWM quotes)`).
+    one entry (`WebSearch(SPY,QQQ,DIA,IWM quotes)`,
+    `AlphaVantage(SPY,QQQ,DIA,IWM)`).
   - Script-sourced data from Stage 2 is compacted the same way:
     `FRED(net_liq,2s10s)`, `Hyperliquid(OI,funding)`,
     `CoinGecko(mcap,dominance)`, `DefiLlama(stables)`, `Deribit(DVOL)`,
     `FRED(calendar)`.
-  - Mark it when script data was unavailable and `WebSearch` substituted:
-    `FRED✗→WebSearch`.
+  - Mark it when a primary source was unavailable and the next one down
+    substituted: `FRED✗→WebSearch`, `AlphaVantage✗→WebSearch`.
   - Never include payloads or return values — debug means *which sources ran*,
     not what they returned.
 - **Messages 1, 7, 8 have no sources footer.** Debug *is* the inventory; 7 and 8
@@ -316,8 +342,9 @@ to the reader.
 | Fetch script fails entirely | Continue on MCP/WebSearch data alone. Flag `Fetch: FAILED (<reason>)` in the debug message. Drop baseline framing from every message — never invent baselines. |
 | `FRED_API_KEY` missing | Fetcher writes `skipped:no-key` into `data/summary.json` and continues (Hyperliquid still valid). Flag in the debug message and the Macro sources footer; Macro fills the gap via armed tools/WebSearch. |
 | Market closed | Determine market open/closed first (Equities playbook — an armed market-status capability, else WebSearch). If closed, the Equities message states last close explicitly, labeled as such — never presented as real-time. |
-| Capability not covered by scripts | Fall back to `WebSearch` for that data point and note it in the sources footer (`FRED✗→WebSearch`-style). Scripts + `WebSearch` are the only two data sources — this is the normal path, not an error. |
-| Rate limit / API error | Retry the call once, then degrade to `WebSearch` for that data point and note the degradation in the sources footer. Never fail the whole run over one tool. |
+| Alpha Vantage not armed in this environment | Not an error — fall back to script-sourced data / `WebSearch` exactly as if the connector didn't exist. Note it once in the debug message's `Notes:` line; do not re-check mid-run. |
+| Capability not covered by scripts or Alpha Vantage | Fall back to `WebSearch` for that data point and note it in the sources footer (`FRED✗→WebSearch`, `AlphaVantage✗→WebSearch`-style). Scripts + Alpha Vantage (if armed) + `WebSearch` are the data sources — this is the normal path, not an error. |
+| Rate limit / API error (Alpha Vantage or any tool) | Retry the call once, then degrade to the next source down (Alpha Vantage → `WebSearch`, or straight to `WebSearch` if Alpha Vantage isn't armed) for that data point and note the degradation in the sources footer. Never fail the whole run over one tool. |
 | Domain fails entirely | Still send that domain's message, stating plainly what's missing — never skip a message in the fixed sequence. |
 | World-affairs sweep | Never skipped, never served from cache — live web search on every run (see Stage 3 hard rule). |
 | Telegram/Composio unavailable | Run the Composio authenticate action (from the live inventory) once, surface the auth link as plain text to the user in-session, **stop the run before data gathering** (Stage 1). Do not loop the complete-authentication action. |
