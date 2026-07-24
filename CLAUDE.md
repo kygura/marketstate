@@ -14,11 +14,10 @@ marketstate produces a market-intelligence briefing: current state of macro
 liquidity, equities, crypto, tech, and geopolitics, plus a cross-domain thesis and
 a probabilistic near-term forecast, delivered as a sequence of Telegram messages.
 
-**Hard rule:** this is market intelligence, not financial advice. No trade
-recommendations, no order execution, no portfolio guidance. Every forward-looking
-statement must be framed with explicit confidence language (`likely`, `we lean`,
-`low-confidence`, `risk skews`) — never state a future market outcome as fact. This
-is enforced concretely in Stage 4 and Message 7 (see DESIGN.md §6).
+**Hard rule:** Every forward-looking statement must be framed with explicit confidence
+language (`likely`, `we lean`, `low-confidence`, `risk skews`) — never state a future
+market outcome as fact. This is enforced concretely in Stage 4 and Message 7 (see
+DESIGN.md §6).
 
 ---
 
@@ -202,9 +201,6 @@ both before drafting. Summary of the contract:
   `base case`, `tail case`, `low-confidence`, `we lean`, `risk skews`, `consensus
   is pricing … / we read …`. A probability may be hedged qualitatively (`a bit
   above even odds`) but never given as a false-precision point estimate ("73%").
-- **Fixed disclaimer line, verbatim, always last** in Message 7:
-  `<i>Not financial advice. Market intelligence only — a reasoned read of public data, not a recommendation to buy or sell anything.</i>`
-  TLDR (Message 8) carries the short form: `<i>Not financial advice.</i>`.
 
 ---
 
@@ -267,17 +263,16 @@ example and exact subsection wording):
 6. **Geopolitics** — header with calm/elevated/acute risk tag, then `Scheduled
    catalysts`, `Active tensions`, `Market linkage`.
 7. **Thesis & Forecast** — header with regime tag, then `What we observe`, `What
-   we infer`, `Forecast` (base case + tail case + consensus-vs-our-read), fixed
-   disclaimer line last. See Stage 4 above and DESIGN.md §6.
+   we infer`, `Forecast` (base case + tail case + consensus-vs-our-read).
+   See Stage 4 above and DESIGN.md §6.
 8. **TLDR** — header + overall regime on top line, one line per domain (emoji +
-   compressed takeaway, no full numbers), one `Watch:` line, short disclaimer.
-   See DESIGN.md §7.
+   compressed takeaway, no full numbers), one `Watch:` line. See DESIGN.md §7.
 
 ### Trimming, when a message runs long
 
 Priority order if trimming is needed (highest value first — trim from the
 bottom, and trim lower-priority messages before touching higher ones):
-1. Thesis & Forecast (7) — never trim the confidence-framing or the disclaimer.
+1. Thesis & Forecast (7) — never trim the confidence-framing.
 2. TLDR (8).
 3. Domain analyses (2-6) — drop the least-load-bearing bullet in a subsection
    before cutting a whole subsection; the news/flow subsection compresses first,
@@ -305,10 +300,20 @@ to the reader.
   ({n} calls) ✅ · WebFetch ✅`), never a per-call enumeration. Composio's only
   role in this pipeline is the Telegram bridge — it is not a data source.
 - **Messages 2-6** each end with exactly one italic sources-footer line,
-  separated from the analysis by a blank line, last thing in the message:
-  `<i>🔧 SOURCE(args) · SOURCE×n</i>`
+  separated from the analysis by a blank line, last thing in the message.
+  **All source references MUST be embedded links (using HTML `<a>` tags):**
+  `<i>🔧 <a href="...">SOURCE</a>(args) · <a href="...">SOURCE</a>×n</i>`
   - Sources are script-sourced data and `WebSearch` — never Composio; it
     never appears in a domain footer.
+  - Every source name must be wrapped in an `<a href="...">` tag pointing to
+    the official source URL:
+    - `FRED` → `https://fred.stlouisfed.org/`
+    - `Hyperliquid` → `https://www.hyperliquid.com/`
+    - `CoinGecko` → `https://www.coingecko.com/`
+    - `DefiLlama` → `https://defillama.com/`
+    - `Deribit` → `https://www.deribit.com/`
+    - `WebSearch` → `https://www.google.com/search?q=...` (with relevant query)
+    - For news/research URLs found during WebSearch, link directly to the article/report
   - Collapse repeated calls (`WebSearch×2`), compact multi-symbol lookups into
     one entry (`WebSearch(SPY,QQQ,DIA,IWM quotes)`).
   - Script-sourced data from Stage 2 is compacted the same way:
@@ -317,8 +322,8 @@ to the reader.
     `FRED(calendar)`.
   - Mark it when a primary source was unavailable and the next one down
     substituted: `FRED✗→WebSearch`.
-  - Never include payloads or return values — debug means *which sources ran*,
-    not what they returned.
+  - Never include payloads or return values — sources means *which data repositories
+    were queried and linked*, not what they returned.
 - **Messages 1, 7, 8 have no sources footer.** Debug *is* the inventory; 7 and 8
   synthesize data already cited in 2-6.
 
