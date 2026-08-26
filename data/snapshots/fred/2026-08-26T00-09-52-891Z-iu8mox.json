@@ -1,0 +1,62 @@
+{
+  "timestamp": "2026-08-26T00:09:52.891Z",
+  "status": "ok",
+  "metrics": {
+    "WALCL": {
+      "value": 6745699,
+      "date": "2026-08-19"
+    },
+    "RRPONTSYD": {
+      "value": 0.405,
+      "date": "2026-08-25"
+    },
+    "WTREGEN": {
+      "value": 953612,
+      "date": "2026-08-19"
+    },
+    "DGS2": {
+      "value": 4.24,
+      "date": "2026-08-24"
+    },
+    "DGS10": {
+      "value": 4.7,
+      "date": "2026-08-24"
+    },
+    "SOFR": {
+      "value": 3.65,
+      "date": "2026-08-24"
+    },
+    "BAMLH0A0HYM2": {
+      "value": 2.69,
+      "date": "2026-08-24"
+    },
+    "VIXCLS": {
+      "value": 15.85,
+      "date": "2026-08-24"
+    },
+    "DTWEXBGS": {
+      "value": 118.0628,
+      "date": "2026-08-21"
+    },
+    "T10YIE": {
+      "value": 2.32,
+      "date": "2026-08-25"
+    },
+    "DCOILWTICO": {
+      "value": 86.48,
+      "date": "2026-08-18"
+    },
+    "DGS3MO": {
+      "value": 3.87,
+      "date": "2026-08-24"
+    },
+    "net_liquidity": {
+      "value": 5791.682,
+      "date": "2026-08-19"
+    },
+    "spread_2s10s": {
+      "value": 0.45999999999999996,
+      "date": "2026-08-24"
+    }
+  }
+}

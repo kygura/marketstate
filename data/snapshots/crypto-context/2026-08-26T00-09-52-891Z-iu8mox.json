@@ -1,0 +1,9 @@
+{
+  "timestamp": "2026-08-26T00:09:52.891Z",
+  "status": "ok",
+  "metrics": {
+    "fear_greed": 65,
+    "stablecoin_cap_usd": 310443764118.5441,
+    "btc_dvol": 43.14
+  }
+}
