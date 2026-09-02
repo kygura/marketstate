@@ -1,10 +1,42 @@
 {
-  "generated_at": "2026-07-17T21:52:36.256Z",
-  "status": "error:The operation was aborted",
+  "generated_at": "2026-09-02T00:08:40.461Z",
+  "status": "ok",
   "window_days": 14,
   "releases": [
     {
-      "date": "2026-07-29",
+      "date": "2026-09-03",
+      "name": "H.4.1 Factors Affecting Reserve Balances"
+    },
+    {
+      "date": "2026-09-03",
+      "name": "Unemployment Insurance Weekly Claims Report"
+    },
+    {
+      "date": "2026-09-04",
+      "name": "Employment Situation"
+    },
+    {
+      "date": "2026-09-10",
+      "name": "H.4.1 Factors Affecting Reserve Balances"
+    },
+    {
+      "date": "2026-09-10",
+      "name": "Producer Price Index"
+    },
+    {
+      "date": "2026-09-10",
+      "name": "Unemployment Insurance Weekly Claims Report"
+    },
+    {
+      "date": "2026-09-11",
+      "name": "Consumer Price Index"
+    },
+    {
+      "date": "2026-09-16",
+      "name": "Advance Monthly Sales for Retail and Food Services"
+    },
+    {
+      "date": "2026-09-16",
       "name": "FOMC rate decision"
     }
   ]
