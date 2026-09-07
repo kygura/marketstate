@@ -1,0 +1,22 @@
+{
+  "timestamp": "2026-09-07T10:00:23.171Z",
+  "status": "ok",
+  "metrics": {
+    "WALCL": {
+      "value": 6737204,
+      "date": "2026-09-02"
+    },
+    "SOFR": {
+      "value": 3.66,
+      "date": "2026-09-03"
+    },
+    "DCOILWTICO": {
+      "value": 91.48,
+      "date": "2026-09-01"
+    },
+    "DGS3MO": {
+      "value": 3.89,
+      "date": "2026-09-03"
+    }
+  }
+}
