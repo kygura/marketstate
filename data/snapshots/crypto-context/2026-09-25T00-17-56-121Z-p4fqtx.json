@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-09-25T00:17:56.121Z",
+  "status": "ok",
+  "metrics": {
+    "total_mcap_usd": 2900359737693.481,
+    "btc_dominance_pct": 58.587375828393654,
+    "fear_greed": 71,
+    "stablecoin_cap_usd": 312338708063.3591,
+    "btc_dvol": 36.06
+  }
+}
