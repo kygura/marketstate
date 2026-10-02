@@ -1,11 +1,6 @@
 {
-  "generated_at": "2026-07-17T21:52:36.256Z",
-  "status": "error:The operation was aborted",
+  "generated_at": "2026-10-02T00:01:45.347Z",
+  "status": "error:The operation timed out.",
   "window_days": 14,
-  "releases": [
-    {
-      "date": "2026-07-29",
-      "name": "FOMC rate decision"
-    }
-  ]
+  "releases": []
 }
